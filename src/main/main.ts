@@ -11,11 +11,14 @@
 import 'core-js/stable';
 import 'regenerator-runtime/runtime';
 import path from 'path';
-import { app, BrowserWindow, shell, ipcMain } from 'electron';
+import fs from 'fs';
+import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron';
 import { autoUpdater } from 'electron-updater';
+import Spritesmith from 'spritesmith';
 import log from 'electron-log';
 import MenuBuilder from './menu';
-import { resolveHtmlPath } from './util';
+import { resolveHtmlPath, convertJson2MapboxStyle } from './util';
+import { SpriteResult } from '../types/sprite';
 
 export default class AppUpdater {
   constructor() {
@@ -27,10 +30,58 @@ export default class AppUpdater {
 
 let mainWindow: BrowserWindow | null = null;
 
-ipcMain.on('ipc-example', async (event, arg) => {
-  const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`;
-  console.log(msgTemplate(arg));
-  event.reply('ipc-example', msgTemplate('pong'));
+// ipcMain.on('ipc-example', async (event, arg) => {
+//   const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`;
+//   console.log(msgTemplate(arg));
+//   event.reply('ipc-example', msgTemplate('pong'));
+// });
+
+// Sprite 相关通信方法
+let savedPath = ''; // 保存目录
+let transformResult: SpriteResult = {
+  coordinates: {},
+  properties: { width: 0, height: 0 },
+  image: Buffer.from('1'),
+}; // 转为sprite后的结果
+
+// 获取保存目录
+ipcMain.handle('sprite:get-saved-directory', async () => {
+  const filesRes = await dialog.showOpenDialog({
+    properties: ['openDirectory'],
+  });
+  [savedPath] = filesRes.filePaths;
+  return savedPath;
+});
+
+// 处理选择文件的事件，监听到渲染进程的事件触发
+ipcMain.handle('sprite:select-mutiple-images', async () => {
+  const filesRes = await dialog.showOpenDialog({
+    properties: ['openFile', 'multiSelections'],
+  });
+  const files = filesRes.filePaths;
+  Spritesmith.run(
+    {
+      src: files,
+      padding: 5,
+    },
+    function handleResult(err: Error, result: SpriteResult) {
+      if (err) {
+        throw err;
+      }
+      transformResult = result;
+    }
+  );
+  return files.length;
+});
+
+// 保存文件到本地
+ipcMain.handle('sprite:save-file', async () => {
+  fs.writeFileSync(`${savedPath}/sprite.png`, transformResult.image);
+  fs.writeFileSync(`${savedPath}/sprite@2x.png`, transformResult.image);
+  const json1 = convertJson2MapboxStyle(transformResult.coordinates, 1);
+  const json2 = convertJson2MapboxStyle(transformResult.coordinates, 2);
+  fs.writeFileSync(`${savedPath}/sprite.json`, json1);
+  fs.writeFileSync(`${savedPath}/sprite@2x.json`, json2);
 });
 
 if (process.env.NODE_ENV === 'production') {

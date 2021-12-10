@@ -5,7 +5,11 @@ module.exports = {
     'import/no-extraneous-dependencies': 'off',
     // Since React 17 and typescript 4.1 you can safely disable the rule
     'react/react-in-jsx-scope': 'off',
+    'import/no-named-as-default': 'off',
+    // 注册 click 事件时不要求注册 keyboard 事件
+    'jsx-a11y/click-events-have-key-events': 'off',
   },
+  plugins: ['@typescript-eslint'],
   parserOptions: {
     ecmaVersion: 2020,
     sourceType: 'module',
